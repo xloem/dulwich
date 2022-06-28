@@ -1037,7 +1037,6 @@ class UnsupportedVersion(Exception):
     def __init__(self, version):
         self.version = version
 
-
 class Repo(BaseRepo):
     """A git repository backed by local disk.
 
@@ -1063,13 +1062,13 @@ class Repo(BaseRepo):
         object_store: Optional[BaseObjectStore] = None,
         bare: Optional[bool] = None
     ) -> None:
-        hidden_path = os.path.join(root, CONTROLDIR)
+        hidden_path = self.path_join(root, CONTROLDIR)
         if bare is None:
-            if (os.path.isfile(hidden_path) or
-                    os.path.isdir(os.path.join(hidden_path, OBJECTDIR))):
+            if (self.path_isfile(hidden_path) or
+                    self.path_isdir(self.path_join(hidden_path, OBJECTDIR))):
                 bare = False
-            elif (os.path.isdir(os.path.join(root, OBJECTDIR)) and
-                    os.path.isdir(os.path.join(root, REFSDIR))):
+            elif (self.path_isdir(self.path_join(root, OBJECTDIR)) and
+                    self.path_isdir(self.path_join(root, REFSDIR))):
                 bare = True
             else:
                 raise NotGitRepository(
@@ -1078,10 +1077,10 @@ class Repo(BaseRepo):
 
         self.bare = bare
         if bare is False:
-            if os.path.isfile(hidden_path):
-                with open(hidden_path, "r") as f:
+            if self.path_isfile(hidden_path):
+                with self.path_open(hidden_path, "r") as f:
                     path = read_gitfile(f)
-                self._controldir = os.path.join(root, path)
+                self._controldir = self.path_join(root, path)
             else:
                 self._controldir = hidden_path
         else:
@@ -1089,9 +1088,9 @@ class Repo(BaseRepo):
         commondir = self.get_named_file(COMMONDIR)
         if commondir is not None:
             with commondir:
-                self._commondir = os.path.join(
+                self._commondir = self.path_join(
                     self.controldir(),
-                    os.fsdecode(commondir.read().rstrip(b"\r\n")),
+                    self.path_decode(commondir.read().rstrip(b"\r\n")),
                 )
         else:
             self._commondir = self._controldir
@@ -1113,10 +1112,10 @@ class Repo(BaseRepo):
         if format_version != 0:
             raise UnsupportedVersion(format_version)
         if object_store is None:
-            object_store = DiskObjectStore.from_config(
-                os.path.join(self.commondir(), OBJECTDIR), config
+            object_store = self.ObjectStore.from_config(
+                self.path_join(self.commondir(), OBJECTDIR), config
             )
-        refs = DiskRefsContainer(
+        refs = self.RefsContainer(
             self.commondir(), self._controldir, logger=self._write_reflog
         )
         BaseRepo.__init__(self, object_store, refs)
@@ -1143,9 +1142,9 @@ class Repo(BaseRepo):
     ):
         from .reflog import format_reflog_line
 
-        path = os.path.join(self.controldir(), "logs", os.fsdecode(ref))
+        path = self.os.path.join(self.controldir(), "logs", self.os.fsdecode(ref))
         try:
-            os.makedirs(os.path.dirname(path))
+            self.os.makedirs(self.os.path.dirname(path))
         except FileExistsError:
             pass
         if committer is None:
@@ -1156,7 +1155,7 @@ class Repo(BaseRepo):
             timestamp = int(time.time())
         if timezone is None:
             timezone = 0  # FIXME
-        with open(path, "ab") as f:
+        with self.open(path, "ab") as f:
             f.write(
                 format_reflog_line(
                     old_sha, new_sha, committer, timestamp, timezone, message
@@ -1677,6 +1676,19 @@ class Repo(BaseRepo):
             )
         except KeyError:
             return BlobNormalizer(config_stack, git_attributes)
+    
+    ObjectStore = DiskObjectStore
+    RefsContainer = DiskRefsContainer
+    def path_join(self, *paths):
+        return os.path.join(*paths)
+    def path_isfile(self, path):
+        return os.path.isfile(path)
+    def path_isdir(self, path):
+        return os.path.isdir(path)
+    def path_open(self, path, mode):
+        return open(path, mode)
+    def path_decode(self, path):
+        return os.fsdecode(path)
 
 
 class MemoryRepo(BaseRepo):
